@@ -1,0 +1,14 @@
+---
+hoge: false
+defaultWatchIntervalSeconds: 60
+watch:
+  - name: hoge
+    namespace: hoge
+    type: Opaque
+    secretPath: /hoge/hoge
+  - name: hoge2
+    namespace: hoge2
+    type: Opaque
+    watchIntervalSeconds: 16
+    secretPath: /hoge/hoge
+    
