@@ -2,25 +2,133 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
 	"fmt"
+	"io/ioutil"
+	"reflect"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	yaml "gopkg.in/yaml.v2"
+	v1 "k8s.io/api/core/v1"
+	apiErrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	intV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
-func watch(ctx context.Context, watch WatchConfig) {
+// check k8s secret and local file periodically. If these is different, replace k8s secret.
+func watch(ctx context.Context, watch WatchConfig, secretClient intV1.SecretInterface) {
 
+	getOpt := metav1.GetOptions{}
+
+	initSecret, err := secretClient.Get(ctx, watch.Name, getOpt)
+	var cachedData map[string]string
+	if err != nil {
+		if apiErrors.IsNotFound(err) {
+			log.Errorf("unexpected error when get secret of %s/%s, but continute goroutine..", watch.Namespace, watch.Name)
+		}
+		cachedData = make(map[string]string)
+	} else {
+		cachedData = initSecret.StringData
+	}
+
+	log.Infof("start watch %s/%s from %s with interval %d sec", watch.Namespace, watch.Name, watch.SecretPath, watch.WatchIntervalSeconds)
 	for {
 
-		log.Infof("conf %s start interval %d sec", watch.Name, watch.WatchIntervalSeconds)
+		log.Debugf("start watch loop %s/%s from %s with interval %d sec", watch.Namespace, watch.Name, watch.SecretPath, watch.WatchIntervalSeconds)
+
+		fileData, err := readSecretFile(&watch)
+		if err != nil {
+			log.Errorf("unexpected error on read file but continue next loop, %s/%s from %s, cause=%w", watch.Namespace, watch.Name, watch.SecretPath, err)
+		} else {
+			if !reflect.DeepEqual(cachedData, fileData) {
+				err = replaceSecret(ctx, secretClient, &watch, fileData, len(cachedData) == 0)
+				if err != nil {
+					log.Errorf("unexpected error on replace secret but continue next loop, %s/%s from %s, cause=%w", watch.Namespace, watch.Name, watch.SecretPath, err)
+				} else {
+					log.Infof("secret %s/%s type=%s was replaced!", watch.Namespace, watch.Name, watch.SecretType)
+					cachedData = fileData
+				}
+			}
+		}
+		log.Debugf("end watch loop %s/%s from %s, next loop after %d sec", watch.Namespace, watch.Name, watch.SecretPath, watch.WatchIntervalSeconds)
 
 		select {
 		case <-ctx.Done():
-			fmt.Printf("%s: canceld \n", watch.Name)
+			log.Warnf("watch %s/%s: canceld", watch.Namespace, watch.Name)
 			return
 		case <-time.After(time.Duration(watch.WatchIntervalSeconds) * time.Second):
 			continue
 		}
 	}
 
+}
+
+func readSecretFile(watch *WatchConfig) (map[string]string, error) {
+	bytes, err := ioutil.ReadFile(watch.SecretPath)
+	if err != nil {
+		return nil, err
+	}
+	data := make(map[string]string)
+	err = yaml.Unmarshal(bytes, data)
+	if err != nil {
+		return nil, err
+	}
+
+	converted, err := convertData(watch.SecretType, data)
+	if err != nil {
+		return nil, err
+	}
+	return converted, nil
+}
+
+func convertData(secretType string, data map[string]string) (map[string]string, error) {
+	newData := make(map[string]string)
+	if v1.SecretType(secretType) == v1.SecretTypeDockerConfigJson {
+		//generate .dockerconfigjson docker-server, docker-username, docker-password
+		dockerServer, ok := data["docker-server"]
+		if !ok {
+			return nil, errors.New("docker-server key not exist")
+		}
+
+		username, ok := data["docker-username"]
+		if !ok {
+			return nil, errors.New("docker-server key not exist")
+		}
+		password, ok := data["docker-password"]
+		if !ok {
+			return nil, errors.New("docker-server key not exist")
+		}
+
+		auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+		dockerconfigjson := fmt.Sprintf(
+			"{\"auths\":{\"https://%s\":{\"username\":\"%s\",\"password\":\"%s\",\"auth\":\"%s\"}}}", dockerServer, username, password, auth)
+		newData[".dockerconfigjson"] = dockerconfigjson
+	} else {
+		for k, v := range data {
+			newData[k] = v
+		}
+	}
+	return newData, nil
+}
+
+func replaceSecret(ctx context.Context, secretClient intV1.SecretInterface, watch *WatchConfig, newData map[string]string, create bool) error {
+	secret := v1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Secret",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      watch.Name,
+			Namespace: watch.Namespace,
+		},
+		StringData: newData,
+	}
+	if create {
+		_, err := secretClient.Create(ctx, &secret, metav1.CreateOptions{})
+		return err
+	} else {
+		_, err := secretClient.Update(ctx, &secret, metav1.UpdateOptions{})
+		return err
+	}
 }

@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"os/signal"
 	"syscall"
 
 	log "github.com/sirupsen/logrus"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	yaml "gopkg.in/yaml.v2"
 )
@@ -34,6 +35,19 @@ func init() {
 	log.SetLevel(log.InfoLevel)
 }
 
+func makeClusterConfig(conf *Config) *kubernetes.Clientset {
+
+	restConfig, err := rest.InClusterConfig()
+	if err != nil {
+		panic(err.Error())
+	}
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		panic(err.Error())
+	}
+	return clientset
+}
+
 func main() {
 
 	var c = Config{
@@ -45,12 +59,12 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	fmt.Print(c)
 	err = yaml.Unmarshal(in, &c)
 	if err != nil {
 		panic(err.Error())
 	}
-	fmt.Println(c)
+
+	clientSet := makeClusterConfig(&c)
 
 	ctx := context.Background()
 	cancelableCtx, cancel := context.WithCancel(ctx)
@@ -58,29 +72,21 @@ func main() {
 		if w.WatchIntervalSeconds == 0 {
 			w.WatchIntervalSeconds = c.DefalutWatchIntervalSeconds
 		}
-		go watch(cancelableCtx, w)
+		secretClient := clientSet.CoreV1().Secrets(w.Namespace)
+		go watch(cancelableCtx, w, &secretClient)
 	}
-	fmt.Println("goroutine call done")
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
 	s := <-sig
 	cancel()
-	fmt.Printf("Signal received: %s , cancell goroutine.\n", s.String())
+	log.Info("Signal received: %s , cancell goroutines.", s.String())
 	//time.Sleep(30 * time.Second)
 
 	//cancel()
 	//fmt.Println("goroutine cancell done")
 	//time.Sleep(5 * time.Second)
-	//config, err := rest.InClusterConfig()
-	//if err != nil {
-	//panic(err.Error())
-	//}
-	// creates the clientset
-	//clientset, err := kubernetes.NewForConfig(config)
-	//if err != nil {
-	//panic(err.Error())
-	//}
+
 	//for {
 	/*
 		pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
