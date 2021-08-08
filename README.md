@@ -9,7 +9,7 @@ This is suited for working with hashicorp k8s-vault.
 build source `go build`
 then, `run ./k8s-secret-sync config.yaml` 
 
-or you can use dockerhub image `<WIP>`
+or you can use dockerhub image `kencharos/k8s-secret-sync` 
 
 you must write k8s cluster config and watching file/secret config in configuration yaml file(config yaml).
 
