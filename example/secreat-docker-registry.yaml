@@ -1,0 +1,5 @@
+# sample for kubernetes.io/dockerconfigjson
+# this type convert to .dockerconfigjon from following items.
+docker-server: private-repo.example.com:5050
+docker-username: private-user
+docker-password: private-pass

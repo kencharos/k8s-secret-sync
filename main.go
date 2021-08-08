@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -10,15 +12,18 @@ import (
 	log "github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	yaml "gopkg.in/yaml.v2"
 )
 
 type Config struct {
-	InCluster                   bool          `yaml:"inCluster"`
-	DefalutWatchIntervalSeconds int64         `yaml:"defalutWatchIntervalSeconds"`
-	KubeconfigPath              string        `yaml:"kubeconfigPath"`
-	Watch                       []WatchConfig `yaml:"watch"`
+	DefalutWatchIntervalSeconds   int64         `yaml:"defalutWatchIntervalSeconds"`
+	InClusterMode                 bool          `yaml:"inClusterMode"`
+	ExternalClusterKubeconfigPath string        `yaml:"externalClusterKubefonfigPath"`
+	ExternalClusterHost           string        `yaml:"externalClusterHost"`
+	ExternalClusterBearerToken    string        `yaml:"externalClusterBearerToken"`
+	Watch                         []WatchConfig `yaml:"watch"`
 }
 
 type WatchConfig struct {
@@ -32,39 +37,47 @@ type WatchConfig struct {
 func init() {
 	log.SetFormatter(&log.JSONFormatter{})
 	log.SetOutput(os.Stdout)
-	log.SetLevel(log.InfoLevel)
-}
-
-func makeClusterConfig(conf *Config) *kubernetes.Clientset {
-
-	restConfig, err := rest.InClusterConfig()
-	if err != nil {
-		panic(err.Error())
+	logLevelText, exists := os.LookupEnv("LOG_LEVEL")
+	if !exists {
+		logLevelText = "info"
 	}
-	clientset, err := kubernetes.NewForConfig(restConfig)
+	logLevel, err := log.ParseLevel(logLevelText)
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
-	return clientset
+	log.SetLevel(logLevel)
 }
 
 func main() {
 
+	flag.Parse()
+	args := flag.Args()
+
+	if len(args) == 0 {
+		panic(errors.New("argument filename is required"))
+	}
+
 	var c = Config{
-		InCluster:                   true,
+		InClusterMode:               true,
 		DefalutWatchIntervalSeconds: 120,
 	}
 
-	in, err := ioutil.ReadFile("./example.yaml")
+	in, err := ioutil.ReadFile(args[0])
 	if err != nil {
+		log.Error(err)
 		panic(err.Error())
 	}
 	err = yaml.Unmarshal(in, &c)
 	if err != nil {
+		log.Error(err)
 		panic(err.Error())
 	}
 
-	clientSet := makeClusterConfig(&c)
+	clientSet, err := makeClusterConfig(&c)
+	if err != nil {
+		log.Error(err)
+		panic(err.Error())
+	}
 
 	ctx := context.Background()
 	cancelableCtx, cancel := context.WithCancel(ctx)
@@ -73,7 +86,7 @@ func main() {
 			w.WatchIntervalSeconds = c.DefalutWatchIntervalSeconds
 		}
 		secretClient := clientSet.CoreV1().Secrets(w.Namespace)
-		go watch(cancelableCtx, w, &secretClient)
+		go watch(cancelableCtx, w, secretClient)
 	}
 
 	sig := make(chan os.Signal, 1)
@@ -81,35 +94,30 @@ func main() {
 	s := <-sig
 	cancel()
 	log.Info("Signal received: %s , cancell goroutines.", s.String())
-	//time.Sleep(30 * time.Second)
 
-	//cancel()
-	//fmt.Println("goroutine cancell done")
-	//time.Sleep(5 * time.Second)
+}
 
-	//for {
-	/*
-		pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
+func makeClusterConfig(conf *Config) (*kubernetes.Clientset, error) {
+
+	if conf.InClusterMode {
+
+		restConfig, err := rest.InClusterConfig()
 		if err != nil {
-			panic(err.Error())
+			return nil, err
 		}
-		fmt.Printf("There are %d pods in the cluster\n", len(pods.Items))
-
-		// Examples for error handling:
-		// - Use helper functions e.g. errors.IsNotFound()
-		// - And/or cast to StatusError and use its properties like e.g. ErrStatus.Message
-		_, err = clientset.CoreV1().Pods("default").Get(context.TODO(), "example-xxxxx", metav1.GetOptions{})
-		if errors.IsNotFound(err) {
-			fmt.Printf("Pod example-xxxxx not found in default namespace\n")
-		} else if statusError, isStatus := err.(*errors.StatusError); isStatus {
-			fmt.Printf("Error getting pod %v\n", statusError.ErrStatus.Message)
-		} else if err != nil {
-			panic(err.Error())
-		} else {
-			fmt.Printf("Found example-xxxxx pod in default namespace\n")
+		return kubernetes.NewForConfig(restConfig)
+	} else if len(conf.ExternalClusterKubeconfigPath) > 0 {
+		restConfig, err := clientcmd.BuildConfigFromFlags("", conf.ExternalClusterKubeconfigPath)
+		if err != nil {
+			return nil, err
 		}
-
-		time.Sleep(10 * time.Second)
-	*/
-	//}
+		return kubernetes.NewForConfig(restConfig)
+	} else if len(conf.ExternalClusterBearerToken) > 0 {
+		restConig := rest.Config{
+			Host:        conf.ExternalClusterHost,
+			BearerToken: conf.ExternalClusterBearerToken,
+		}
+		return kubernetes.NewForConfig(&restConig)
+	}
+	return nil, errors.New("k8s cluster config invalid")
 }

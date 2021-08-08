@@ -1,0 +1,23 @@
+---
+defaultWatchIntervalSeconds: 120
+inClusterMode: true
+## if inClusterMode is false, you must specify kubeconfig or k8s host and Bearer token pair.
+#externalClusterKubeconfigPath: "<home>/.kube/config"
+#externalClusterHost: "https://k8s.example.com/"
+#externalClusterBearerToken: "LS0tLS1C....."
+watch:
+  - name: sample-secret
+    namespace: sample-ns
+    type: Opaque
+    secretPath: /secret/sample-secret.yml
+  - name: ingress-tls-certs
+    namespace: sample-ns
+    type: kubernetes.io/tls
+    watchIntervalSeconds: 16
+    secretPath: /secret/ingress-tls-certs.yml
+  - name: docker-cred
+    namespace: sample-ns
+    type: kubernetes.io/dockerconfigjson
+    secretPath: /secret/docker-cred.yml
+    
+    
