@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -20,7 +19,7 @@ import (
 type Config struct {
 	DefalutWatchIntervalSeconds   int64         `yaml:"defalutWatchIntervalSeconds"`
 	InClusterMode                 bool          `yaml:"inClusterMode"`
-	ExternalClusterKubeconfigPath string        `yaml:"externalClusterKubefonfigPath"`
+	ExternalClusterKubeconfigPath string        `yaml:"externalClusterKubeconfigPath"`
 	ExternalClusterHost           string        `yaml:"externalClusterHost"`
 	ExternalClusterBearerToken    string        `yaml:"externalClusterBearerToken"`
 	Watch                         []WatchConfig `yaml:"watch"`
@@ -50,10 +49,7 @@ func init() {
 
 func main() {
 
-	flag.Parse()
-	args := flag.Args()
-
-	if len(args) == 0 {
+	if len(os.Args) == 1 {
 		panic(errors.New("argument filename is required"))
 	}
 
@@ -62,7 +58,7 @@ func main() {
 		DefalutWatchIntervalSeconds: 120,
 	}
 
-	in, err := ioutil.ReadFile(args[0])
+	in, err := ioutil.ReadFile(os.Args[1])
 	if err != nil {
 		log.Error(err)
 		panic(err.Error())
@@ -93,7 +89,7 @@ func main() {
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
 	s := <-sig
 	cancel()
-	log.Info("Signal received: %s , cancell goroutines.", s.String())
+	log.Infof("Signal received: %s , cancell goroutines.", s.String())
 
 }
 

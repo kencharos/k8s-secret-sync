@@ -25,11 +25,14 @@ func watch(ctx context.Context, watch WatchConfig, secretClient intV1.SecretInte
 	initSecret, err := secretClient.Get(ctx, watch.Name, getOpt)
 	var cachedData map[string]string
 	if err != nil {
-		if apiErrors.IsNotFound(err) {
+		if !apiErrors.IsNotFound(err) {
 			log.Errorf("unexpected error when get secret of %s/%s, but continute goroutine..", watch.Namespace, watch.Name)
+			log.Error(err)
 		}
+		log.Debugf("secret %s/%s does not exists", watch.Namespace, watch.Name)
 		cachedData = make(map[string]string)
 	} else {
+		log.Debugf("secret %s/%s already exists", watch.Namespace, watch.Name)
 		cachedData = initSecret.StringData
 	}
 
@@ -40,12 +43,14 @@ func watch(ctx context.Context, watch WatchConfig, secretClient intV1.SecretInte
 
 		fileData, err := readSecretFile(&watch)
 		if err != nil {
-			log.Errorf("unexpected error on read file but continue next loop, %s/%s from %s, cause=%w", watch.Namespace, watch.Name, watch.SecretPath, err)
+			log.Errorf("unexpected error on read file but continue next loop, %s/%s from %s", watch.Namespace, watch.Name, watch.SecretPath)
+			log.Error(err)
 		} else {
 			if !reflect.DeepEqual(cachedData, fileData) {
 				err = replaceSecret(ctx, secretClient, &watch, fileData, len(cachedData) == 0)
 				if err != nil {
-					log.Errorf("unexpected error on replace secret but continue next loop, %s/%s from %s, cause=%w", watch.Namespace, watch.Name, watch.SecretPath, err)
+					log.Errorf("unexpected error on replace secret but continue next loop, %s/%s from %s", watch.Namespace, watch.Name, watch.SecretPath)
+					log.Error(err)
 				} else {
 					log.Infof("secret %s/%s type=%s was replaced!", watch.Namespace, watch.Name, watch.SecretType)
 					cachedData = fileData
@@ -122,12 +127,15 @@ func replaceSecret(ctx context.Context, secretClient intV1.SecretInterface, watc
 			Name:      watch.Name,
 			Namespace: watch.Namespace,
 		},
+		Type:       v1.SecretType(watch.SecretType),
 		StringData: newData,
 	}
 	if create {
+		log.Debugf("Create secret %s/%s", watch.Namespace, watch.Name)
 		_, err := secretClient.Create(ctx, &secret, metav1.CreateOptions{})
 		return err
 	} else {
+		log.Debugf("Update secret %s/%s", watch.Namespace, watch.Name)
 		_, err := secretClient.Update(ctx, &secret, metav1.UpdateOptions{})
 		return err
 	}

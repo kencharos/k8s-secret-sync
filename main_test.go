@@ -1,32 +1,45 @@
 package main
 
-import "testing"
+import (
+	"io/ioutil"
+	"os"
+	"testing"
+	"time"
+)
 
-func add(a, b int) int {
-	return a + b
+// check not raise panic when config valid.
+func TestMainConfigParseProcess(t *testing.T) {
+
+	config := `---
+defaultWatchIntervalSeconds: 1
+inClusterMode: false
+externalClusterBearerToken: "token"
+externalClusterHost: "https://localhost:5050/api"
+watch:
+- name: test
+  namespace: testns
+  type: Opaque
+  secretPath: /tmp/sample.yml
+`
+
+	configPath := mkYamlFile(config)
+
+	os.Args = []string{"test", configPath}
+	go func() { main() }()
+	time.Sleep(1 * time.Second)
 }
 
-func TestAdd(t *testing.T) {
-	type args struct {
-		a int
-		b int
+func mkYamlFile(raw string) string {
+
+	f, err := ioutil.TempFile(os.TempDir(), "sec")
+	if err != nil {
+		panic(err)
 	}
-	tests := []struct {
-		name string
-		args args
-		want int
-	}{
-		{
-			name: "normal",
-			args: args{a: 1, b: 2},
-			want: 3,
-		},
+	defer f.Close()
+	_, err = f.WriteString(raw)
+
+	if err != nil {
+		panic(err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := add(tt.args.a, tt.args.b); got != tt.want {
-				t.Errorf("add() = %v, want %v", got, tt.want)
-			}
-		})
-	}
+	return f.Name()
 }
