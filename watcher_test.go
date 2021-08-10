@@ -69,7 +69,7 @@ func TestSecretCreatedWhenSecretIsEmptyAndFileExists(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	sclient := client.CoreV1().Secrets("testnamesapce")
 
-	data := map[string]string{"key1": "val1", "key2": "val2"}
+	data := map[string][]byte{"key1": []byte("val1"), "key2": []byte("val2")}
 	path := mkSecretFile(data)
 	fixture := WatchConfig{
 		WatchIntervalSeconds: 10,
@@ -104,8 +104,8 @@ func TestSecretCreatedWhenSecretIsEmptyAndFileExists(t *testing.T) {
 	if act.Type != v1.SecretTypeOpaque {
 		t.Fatalf("secret type registration invalid: %s<=>%s", act.Type, "Opaque")
 	}
-	if !reflect.DeepEqual(act.StringData, data) {
-		t.Fatalf("secret data registration invalid: %s<=>%s", act.StringData, data)
+	if !reflect.DeepEqual(act.Data, data) {
+		t.Fatalf("secret data registration invalid: %s<=>%s", act.Data, data)
 	}
 }
 
@@ -119,7 +119,7 @@ func TestSecretNotUpdateWhenSecretAndFileAreSame(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	sclient := client.CoreV1().Secrets("testnamesapce")
 
-	data := map[string]string{"key1": "val1", "key2": "val2"}
+	data := map[string][]byte{"key1": []byte("val1"), "key2": []byte("val2")}
 	path := mkSecretFile(data)
 	fixture := WatchConfig{
 		WatchIntervalSeconds: 5,
@@ -156,8 +156,8 @@ func TestSecretNotUpdateWhenSecretAndFileAreSame(t *testing.T) {
 	if act.Type != v1.SecretTypeOpaque {
 		t.Fatalf("secret type registration invalid: %s<=>%s", act.Type, "Opaque")
 	}
-	if !reflect.DeepEqual(act.StringData, data) {
-		t.Fatalf("secret data registration invalid: %s<=>%s", act.StringData, data)
+	if !reflect.DeepEqual(act.Data, data) {
+		t.Fatalf("secret data registration invalid: %s<=>%s", act.Data, data)
 	}
 }
 
@@ -171,7 +171,7 @@ func TestSecretUpdateWhenSecretAndFileAreDifferent(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	sclient := client.CoreV1().Secrets("testnamesapce")
 
-	data := map[string]string{"key1": "val1", "key3": "val3"}
+	data := map[string][]byte{"key1": []byte("val1"), "key3": []byte("val3")}
 	path := mkSecretFile(data)
 	fixture := WatchConfig{
 		WatchIntervalSeconds: 5,
@@ -180,7 +180,7 @@ func TestSecretUpdateWhenSecretAndFileAreDifferent(t *testing.T) {
 		SecretType:           "Opaque",
 		SecretPath:           path,
 	}
-	createSecret(sclient, &fixture, map[string]string{"key1": "val1", "key2": "val2"})
+	createSecret(sclient, &fixture, map[string][]byte{"key1": []byte("val1"), "key2": []byte("val2")})
 	go func() {
 		watch(btc, fixture, sclient)
 		done <- true
@@ -208,8 +208,8 @@ func TestSecretUpdateWhenSecretAndFileAreDifferent(t *testing.T) {
 	if act.Type != v1.SecretTypeOpaque {
 		t.Fatalf("secret type registration invalid: %s<=>%s", act.Type, "Opaque")
 	}
-	if !reflect.DeepEqual(act.StringData, data) {
-		t.Fatalf("secret data registration invalid: %s<=>%s", act.StringData, data)
+	if !reflect.DeepEqual(act.Data, data) {
+		t.Fatalf("secret data registration invalid: %s<=>%s", act.Data, data)
 	}
 }
 
@@ -223,7 +223,7 @@ func TestSecretUpdateWhenSecretAndFileAreDifferentPattern2(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	sclient := client.CoreV1().Secrets("testnamesapce")
 
-	data := map[string]string{"key1": "val1", "key2": "val2Update"}
+	data := map[string][]byte{"key1": []byte("val1"), "key2": []byte("val2Update")}
 	path := mkSecretFile(data)
 	fixture := WatchConfig{
 		WatchIntervalSeconds: 5,
@@ -232,7 +232,7 @@ func TestSecretUpdateWhenSecretAndFileAreDifferentPattern2(t *testing.T) {
 		SecretType:           "Opaque",
 		SecretPath:           path,
 	}
-	createSecret(sclient, &fixture, map[string]string{"key1": "val1", "key2": "val2"})
+	createSecret(sclient, &fixture, map[string][]byte{"key1": []byte("val1"), "key2": []byte("val2")})
 	go func() {
 		watch(btc, fixture, sclient)
 		done <- true
@@ -260,8 +260,8 @@ func TestSecretUpdateWhenSecretAndFileAreDifferentPattern2(t *testing.T) {
 	if act.Type != v1.SecretTypeOpaque {
 		t.Fatalf("secret type registration invalid: %s<=>%s", act.Type, "Opaque")
 	}
-	if !reflect.DeepEqual(act.StringData, data) {
-		t.Fatalf("secret data registration invalid: %s<=>%s", act.StringData, data)
+	if !reflect.DeepEqual(act.Data, data) {
+		t.Fatalf("secret data registration invalid: %s<=>%s", act.Data, data)
 	}
 
 }
@@ -276,7 +276,8 @@ func TestDockerConfigJson(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	sclient := client.CoreV1().Secrets("testnamesapce")
 
-	data := map[string]string{"docker-server": "private.example.com:5050", "docker-username": "user", "docker-password": "pass"}
+	data := map[string][]byte{"docker-server": []byte("private.example.com:5050"),
+		"docker-username": []byte("user"), "docker-password": []byte("pass")}
 	path := mkSecretFile(data)
 	fixture := WatchConfig{
 		WatchIntervalSeconds: 1,
@@ -306,7 +307,7 @@ func TestDockerConfigJson(t *testing.T) {
 	if act.Type != v1.SecretTypeDockerConfigJson {
 		t.Fatalf("secret type registration invalid: %s<=>%s", act.Type, "kubernetes.io/dockerconfigjson")
 	}
-	dockercred, ok := act.StringData[".dockerconfigjson"]
+	dockercred, ok := act.Data[".dockerconfigjson"]
 	if !ok {
 		t.Fatalf(".dockerconfigjson not exists")
 	}
@@ -331,7 +332,12 @@ func TestDockerConfigJson(t *testing.T) {
 	}
 }
 
-func createSecret(client intV1.SecretInterface, watch *WatchConfig, data map[string]string) {
+func createSecret(client intV1.SecretInterface, watch *WatchConfig, data map[string][]byte) {
+	bd := make(map[string][]byte)
+	for k, v := range data {
+		bd[k] = []byte(v)
+	}
+
 	secret := v1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Secret",
@@ -340,8 +346,8 @@ func createSecret(client intV1.SecretInterface, watch *WatchConfig, data map[str
 			Name:      watch.Name,
 			Namespace: watch.Namespace,
 		},
-		Type:       v1.SecretType(watch.SecretType),
-		StringData: data,
+		Type: v1.SecretType(watch.SecretType),
+		Data: bd,
 	}
 	_, err := client.Create(context.TODO(), &secret, metav1.CreateOptions{})
 	if err != nil {
@@ -349,7 +355,7 @@ func createSecret(client intV1.SecretInterface, watch *WatchConfig, data map[str
 	}
 }
 
-func mkSecretFile(data map[string]string) string {
+func mkSecretFile(data map[string][]byte) string {
 
 	f, err := ioutil.TempFile(os.TempDir(), "sec")
 	if err != nil {
@@ -357,7 +363,12 @@ func mkSecretFile(data map[string]string) string {
 	}
 	defer f.Close()
 
-	bytes, err := yaml.Marshal(data)
+	sd := make(map[string]string)
+	for k, v := range data {
+		sd[k] = string(v)
+	}
+
+	bytes, err := yaml.Marshal(sd)
 	if err != nil {
 		panic(err)
 	}

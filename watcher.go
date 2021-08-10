@@ -23,17 +23,17 @@ func watch(ctx context.Context, watch WatchConfig, secretClient intV1.SecretInte
 	getOpt := metav1.GetOptions{}
 
 	initSecret, err := secretClient.Get(ctx, watch.Name, getOpt)
-	var cachedData map[string]string
+	cachedData := make(map[string][]byte)
 	if err != nil {
 		if !apiErrors.IsNotFound(err) {
 			log.Errorf("unexpected error when get secret of %s/%s, but continute goroutine..", watch.Namespace, watch.Name)
 			log.Error(err)
 		}
 		log.Debugf("secret %s/%s does not exists", watch.Namespace, watch.Name)
-		cachedData = make(map[string]string)
 	} else {
 		log.Debugf("secret %s/%s already exists", watch.Namespace, watch.Name)
-		cachedData = initSecret.StringData
+		// notice! StringData is write only. empty.
+		cachedData = initSecret.Data
 	}
 
 	log.Infof("start watch %s/%s from %s with interval %d sec", watch.Namespace, watch.Name, watch.SecretPath, watch.WatchIntervalSeconds)
@@ -70,7 +70,7 @@ func watch(ctx context.Context, watch WatchConfig, secretClient intV1.SecretInte
 
 }
 
-func readSecretFile(watch *WatchConfig) (map[string]string, error) {
+func readSecretFile(watch *WatchConfig) (map[string][]byte, error) {
 	bytes, err := ioutil.ReadFile(watch.SecretPath)
 	if err != nil {
 		return nil, err
@@ -88,8 +88,8 @@ func readSecretFile(watch *WatchConfig) (map[string]string, error) {
 	return converted, nil
 }
 
-func convertData(secretType string, data map[string]string) (map[string]string, error) {
-	newData := make(map[string]string)
+func convertData(secretType string, data map[string]string) (map[string][]byte, error) {
+	newData := make(map[string][]byte)
 	if v1.SecretType(secretType) == v1.SecretTypeDockerConfigJson {
 		//generate .dockerconfigjson docker-server, docker-username, docker-password
 		dockerServer, ok := data["docker-server"]
@@ -109,16 +109,16 @@ func convertData(secretType string, data map[string]string) (map[string]string, 
 		auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
 		dockerconfigjson := fmt.Sprintf(
 			"{\"auths\":{\"https://%s\":{\"username\":\"%s\",\"password\":\"%s\",\"auth\":\"%s\"}}}", dockerServer, username, password, auth)
-		newData[".dockerconfigjson"] = dockerconfigjson
+		newData[".dockerconfigjson"] = []byte(dockerconfigjson)
 	} else {
 		for k, v := range data {
-			newData[k] = v
+			newData[k] = []byte(v)
 		}
 	}
 	return newData, nil
 }
 
-func replaceSecret(ctx context.Context, secretClient intV1.SecretInterface, watch *WatchConfig, newData map[string]string, create bool) error {
+func replaceSecret(ctx context.Context, secretClient intV1.SecretInterface, watch *WatchConfig, newData map[string][]byte, create bool) error {
 	secret := v1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Secret",
@@ -127,8 +127,8 @@ func replaceSecret(ctx context.Context, secretClient intV1.SecretInterface, watc
 			Name:      watch.Name,
 			Namespace: watch.Namespace,
 		},
-		Type:       v1.SecretType(watch.SecretType),
-		StringData: newData,
+		Type: v1.SecretType(watch.SecretType),
+		Data: newData,
 	}
 	if create {
 		log.Debugf("Create secret %s/%s", watch.Namespace, watch.Name)

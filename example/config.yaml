@@ -9,15 +9,15 @@ watch:
   - name: sample-secret
     namespace: sample-ns
     type: Opaque
-    secretPath: /secret/sample-secret.yml
+    secretPath: /vault/secrets/sample-secret.yml
   - name: ingress-tls-certs
     namespace: sample-ns
     type: kubernetes.io/tls
     watchIntervalSeconds: 16
-    secretPath: /secret/ingress-tls-certs.yml
+    secretPath: /vault/secrets/ingress-tls-certs.yml
   - name: docker-cred
     namespace: sample-ns
     type: kubernetes.io/dockerconfigjson
-    secretPath: /secret/docker-cred.yml
+    secretPath: /vault/secrets/docker-cred.yml
     
     
