@@ -17,7 +17,7 @@ import (
 )
 
 type Config struct {
-	DefalutWatchIntervalSeconds   int64         `yaml:"defalutWatchIntervalSeconds"`
+	DefaultWatchIntervalSeconds   int64         `yaml:"defaultWatchIntervalSeconds"`
 	InClusterMode                 bool          `yaml:"inClusterMode"`
 	ExternalClusterKubeconfigPath string        `yaml:"externalClusterKubeconfigPath"`
 	ExternalClusterHost           string        `yaml:"externalClusterHost"`
@@ -55,7 +55,7 @@ func main() {
 
 	var c = Config{
 		InClusterMode:               true,
-		DefalutWatchIntervalSeconds: 120,
+		DefaultWatchIntervalSeconds: 120,
 	}
 
 	in, err := ioutil.ReadFile(os.Args[1])
@@ -79,7 +79,7 @@ func main() {
 	cancelableCtx, cancel := context.WithCancel(ctx)
 	for _, w := range c.Watch {
 		if w.WatchIntervalSeconds == 0 {
-			w.WatchIntervalSeconds = c.DefalutWatchIntervalSeconds
+			w.WatchIntervalSeconds = c.DefaultWatchIntervalSeconds
 		}
 		secretClient := clientSet.CoreV1().Secrets(w.Namespace)
 		go watch(cancelableCtx, w, secretClient)

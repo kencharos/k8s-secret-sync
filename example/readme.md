@@ -98,3 +98,16 @@ vault kv put secret/tls_sample @tlscert.json
 ```
 kubectl apply -f k8s-secret-sync.yml
 ```
+
+after apply, check secret registeration.
+
+```
+% kubectl get secret                    NAME                               TYPE      
+docker-cred                        kubernetes.io/dockerconfigjson        1      9h
+ingress-tls-certs                  kubernetes.io/tls                     2      9h
+sample-secret                      Opaque                                2      9h
+```
+
+Update vault secret in valut command or vault UI. 
+Then, k8s secret will be updated soon.
+
